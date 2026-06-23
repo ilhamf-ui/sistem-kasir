@@ -1,14 +1,15 @@
 {
   "name": "jasuke-backend",
-  "version": "1.0.0",
   "private": true,
   "scripts": {
     "dev": "nitro dev --port 3000",
-    "build": "nitro build",
-    "start": "node .nitro/dev/index.mjs"
+    "build": "npx nitro build",
+    "start": "node .output/server/index.mjs"
   },
   "dependencies": {
-    "nitropack": "^2.10.4",
     "h3": "^1.15.3"
+  },
+  "devDependencies": {
+    "nitropack": "^2.10.4"
   }
 }
