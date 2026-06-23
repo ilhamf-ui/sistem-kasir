@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "dev": "nitro dev --port 3000",
-    "build": "npx nitro build",
+    "build": "node ./node_modules/nitropack/dist/cli/index.mjs build",
     "start": "node .output/server/index.mjs"
   },
   "dependencies": {
