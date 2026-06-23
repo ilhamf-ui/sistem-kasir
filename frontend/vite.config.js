@@ -7,7 +7,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'YOUR-BACKEND.up.railway.app',
+        target: 'https://divine-dream-production-e2bf.up.railway.app',
         changeOrigin: true
       }
     }
