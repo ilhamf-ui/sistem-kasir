@@ -1,0 +1,260 @@
+import React, { useState, useMemo } from 'react'
+import { FileSpreadsheet, Calendar, CalendarDays, CalendarCheck, Trash2, Package, Bot } from 'lucide-react'
+import { formatIDR, calculateItemPrice } from '../utils/formatters'
+import AiChat from './AiChat'
+
+const FILTERS = [
+  { key: 'Harian', icon: Calendar },
+  { key: 'Mingguan', icon: CalendarDays },
+  { key: 'Bulanan', icon: CalendarCheck },
+]
+
+export default function DashboardView({ transactions, filter, setFilter, role, onDeleteTransaction, onRefresh }) {
+  const [aiOpen, setAiOpen] = useState(false)
+
+  const productSummary = useMemo(() => {
+    const summary = {}
+    transactions.forEach(trx => {
+      trx.items.forEach(item => {
+        const itemName = item.size ? `${item.name} (${item.size})` : item.name
+        if (!summary[itemName]) summary[itemName] = { qty: 0, revenue: 0, category: item.category }
+        summary[itemName].qty += item.qty
+        summary[itemName].revenue += calculateItemPrice(item, {}) * item.qty
+      })
+    })
+    return Object.entries(summary).map(([name, data]) => ({ name, ...data })).sort((a, b) => b.qty - a.qty)
+  }, [transactions])
+
+  const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0)
+
+  const exportToCSV = () => {
+    if (transactions.length === 0) return
+
+    let csv = `LAPORAN PENJUALAN MR & TEA JASUKE - PERIODE ${filter.toUpperCase()}\n\n`
+    csv += '--- RIWAYAT TRANSAKSI ---\n'
+    csv += 'ID Transaksi,Tanggal,Waktu,Kasir,Shift,Total,Diterima,Kembalian,Detail Item\n'
+    transactions.forEach(t => {
+      const d = new Date(t.time)
+      const itemsStr = t.items.map(i => `${i.qty}x ${i.name}`).join(' | ')
+      csv += `${t.id},${d.toLocaleDateString('id-ID')},${d.toLocaleTimeString('id-ID')},${t.cashier},${t.shift},${t.total},${t.received},${t.change},"${itemsStr}"\n`
+    })
+    csv += '\n--- REKAP PRODUK TERJUAL ---\n'
+    csv += 'Nama Item,Kategori,Total Porsi,Total Pendapatan\n'
+    productSummary.forEach(item => {
+      csv += `"${item.name}",${item.category},${item.qty},${item.revenue}\n`
+    })
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.setAttribute('href', url)
+    link.setAttribute('download', `Laporan_${filter}_Jasuke.csv`)
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
+
+  return (
+    <div style={{
+      flex: 1, display: 'flex', flexDirection: 'column',
+      height: '100%', background: '#0e0e0e', overflow: 'hidden'
+    }}>
+      <div className="custom-scrollbar" style={{ flex: 1, overflowY: 'auto', padding: '28px 28px 100px' }}>
+
+        {/* Header Row */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16, marginBottom: 28 }}>
+          <div>
+            <h2 style={{ fontSize: 26, fontWeight: 800, color: 'var(--secondary)', marginBottom: 14 }}>
+              Dashboard Laporan
+            </h2>
+            <div style={{ display: 'flex', flexWrap: 'wrap', background: '#0a0a0a', padding: 4, borderRadius: 14, border: '1px solid var(--border)', gap: 2 }}>
+              {FILTERS.map(({ key, icon: Icon }) => (
+                <button
+                  key={key}
+                  onClick={() => setFilter(key)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 6,
+                    padding: '8px 16px', borderRadius: 10, border: 'none',
+                    fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: 'Inter, sans-serif',
+                    background: filter === key ? 'var(--primary)' : 'transparent',
+                    color: filter === key ? 'white' : 'var(--text-muted)',
+                    boxShadow: filter === key ? '0 2px 8px var(--primary-glow)' : 'none',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  <Icon size={14} />
+                  {key === 'Harian' ? 'Hari Ini' : key === 'Mingguan' ? 'Minggu Ini' : 'Bulan Ini'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={exportToCSV}
+            disabled={transactions.length === 0}
+            className="btn-primary"
+            style={{ padding: '12px 20px', fontSize: 14, gap: 8 }}
+          >
+            <FileSpreadsheet size={18} /> Export CSV
+          </button>
+        </div>
+
+        {/* Stats Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 16, marginBottom: 28 }}>
+          <StatCard label={`Total Penjualan ${filter}`} value={formatIDR(totalRevenue)} valueColor="white" />
+          <StatCard
+            label="Total Transaksi"
+            value={<>{transactions.length} <span style={{ fontSize: 12, fontWeight: 400, color: 'var(--text-muted)' }}>struk</span></>}
+            valueColor="white"
+          />
+          <StatCard
+            label="Akses Sistem"
+            value={role === 'Manager' ? 'Mode Manajer' : 'Cashier'}
+            valueColor="var(--primary)"
+            valueFontSize={20}
+          />
+        </div>
+
+        {/* Tables */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.8fr)', gap: 20, alignItems: 'start' }}>
+
+          {/* Product Summary */}
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Package size={18} color="var(--secondary)" />
+              <h3 style={{ fontSize: 16, fontWeight: 700 }}>Rekap Produk</h3>
+            </div>
+            <div className="custom-scrollbar" style={{ maxHeight: 520, overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#111', zIndex: 1 }}>
+                  <tr style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Nama Item</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600 }}>Porsi</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>Pendapatan</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productSummary.length === 0 ? (
+                    <tr><td colSpan={3} style={{ padding: 28, textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 13 }}>Belum ada data penjualan.</td></tr>
+                  ) : productSummary.map((item, idx) => (
+                    <tr key={idx} style={{ borderTop: '1px solid var(--border)', transition: 'background 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--text-secondary)' }}>
+                        {item.name}
+                        {item.category === 'Custom' && (
+                          <span style={{ marginLeft: 6, padding: '1px 5px', borderRadius: 4, fontSize: 9, background: 'rgba(59,130,246,0.15)', color: '#60a5fa', border: '1px solid rgba(59,130,246,0.3)' }}>Custom</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '12px 10px', fontSize: 14, fontWeight: 700, textAlign: 'center' }}>{item.qty}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 13, color: 'var(--primary)', fontWeight: 600, textAlign: 'right' }}>{formatIDR(item.revenue)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Transaction History */}
+          <div className="card" style={{ overflow: 'hidden' }}>
+            <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)' }}>
+              <h3 style={{ fontSize: 16, fontWeight: 700 }}>Riwayat Transaksi</h3>
+            </div>
+            <div className="custom-scrollbar" style={{ maxHeight: 520, overflowX: 'auto', overflowY: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
+                <thead style={{ position: 'sticky', top: 0, background: '#111', zIndex: 1 }}>
+                  <tr style={{ color: 'var(--text-muted)', fontSize: 11, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Waktu</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>ID</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Item</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Kasir</th>
+                    <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>Total</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {transactions.length === 0 ? (
+                    <tr><td colSpan={5} style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 13 }}>Belum ada transaksi.</td></tr>
+                  ) : transactions.map(t => (
+                    <tr
+                      key={t.id}
+                      style={{ borderTop: '1px solid var(--border)', transition: 'background 0.1s' }}
+                      onMouseEnter={e => e.currentTarget.style.background = 'rgba(255,255,255,0.02)'}
+                      onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                    >
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
+                        {new Date(t.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'white' }}>{t.id}</td>
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                        title={t.items.map(i => `${i.qty}x ${i.name}`).join(', ')}>
+                        {t.items.map(i => `${i.qty}x ${i.name}`).join(', ')}
+                      </td>
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)' }}>{t.cashier}</td>
+                      <td style={{ padding: '12px 16px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
+                          <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 13 }}>{formatIDR(t.total)}</span>
+                          <button
+                            onClick={() => onDeleteTransaction(t.id, t.total)}
+                            style={{
+                              padding: '5px 7px', border: 'none', borderRadius: 8,
+                              background: 'transparent', color: 'var(--danger)', cursor: 'pointer',
+                              opacity: 0.6, transition: 'all 0.15s'
+                            }}
+                            onMouseEnter={e => { e.currentTarget.style.opacity = 1; e.currentTarget.style.background = 'rgba(239,68,68,0.12)' }}
+                            onMouseLeave={e => { e.currentTarget.style.opacity = 0.6; e.currentTarget.style.background = 'transparent' }}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* AI Chat FAB */}
+      {role === 'Manager' && !aiOpen && (
+        <button
+          onClick={() => setAiOpen(true)}
+          className="btn-primary"
+          style={{
+            position: 'fixed', bottom: 90, right: 24,
+            width: 58, height: 58, borderRadius: '50%', padding: 0,
+            boxShadow: '0 8px 30px rgba(107,142,35,0.45)',
+            zIndex: 40, transition: 'transform 0.2s'
+          }}
+          onMouseEnter={e => e.currentTarget.style.transform = 'scale(1.1)'}
+          onMouseLeave={e => e.currentTarget.style.transform = 'scale(1)'}
+        >
+          <Bot size={26} />
+        </button>
+      )}
+      {role === 'Manager' && aiOpen && (
+        <AiChat
+          transactions={transactions}
+          filter={filter}
+          onClose={() => setAiOpen(false)}
+        />
+      )}
+
+      <style>{`
+        @media (max-width: 768px) {
+          [data-dashboard-grid] { grid-template-columns: 1fr !important; }
+        }
+      `}</style>
+    </div>
+  )
+}
+
+function StatCard({ label, value, valueColor, valueFontSize = 28 }) {
+  return (
+    <div className="card" style={{ padding: '20px 22px' }}>
+      <p style={{ color: 'var(--text-secondary)', fontSize: 13, fontWeight: 500, marginBottom: 8 }}>{label}</p>
+      <p style={{ fontSize: valueFontSize, fontWeight: 900, color: valueColor, lineHeight: 1.2 }}>{value}</p>
+    </div>
+  )
+}
