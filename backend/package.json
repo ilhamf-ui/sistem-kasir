@@ -7,9 +7,7 @@
     "start": "node .output/server/index.mjs"
   },
   "dependencies": {
-    "h3": "^1.15.3"
-  },
-  "devDependencies": {
+    "h3": "^1.15.3",
     "nitropack": "^2.10.4"
   }
 }
