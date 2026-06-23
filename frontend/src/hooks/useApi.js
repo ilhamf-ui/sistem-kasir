@@ -1,7 +1,7 @@
 // Custom hook untuk berkomunikasi dengan Nuxt.js backend API
 import { useState, useCallback } from 'react'
 
-const BASE_URL = '/api'
+const BASE_URL = 'divine-dream-production-e2bf.up.railway.app'
 
 async function request(method, path, body = null) {
   const options = {
@@ -40,10 +40,10 @@ export function useApi() {
   return {
     loading,
     error,
-    getMenu:         () => call('GET', '/menu'),
-    getToppings:     () => call('GET', '/toppings'),
+    getMenu: () => call('GET', '/menu'),
+    getToppings: () => call('GET', '/toppings'),
     getTransactions: (filter) => call('GET', `/transactions${filter ? `?filter=${filter}` : ''}`),
-    postTransaction: (trx)    => call('POST', '/transactions', trx),
-    deleteTransaction: (id)   => call('DELETE', `/transactions/${id}`),
+    postTransaction: (trx) => call('POST', '/transactions', trx),
+    deleteTransaction: (id) => call('DELETE', `/transactions/${id}`),
   }
 }
