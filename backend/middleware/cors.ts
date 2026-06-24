@@ -1,10 +1,20 @@
+import {
+  defineEventHandler,
+  getRequestHeader,
+  setResponseHeaders
+} from 'h3'
+
 // CORS middleware untuk semua /api/** routes
 export default defineEventHandler((event) => {
   const origin = getRequestHeader(event, 'origin') || ''
-  
+
   // Allow React dev server & production
-  const allowed = ['http://localhost:5173', 'http://localhost:4173']
-  
+  const allowed = [
+    'http://localhost:5173',
+    'http://localhost:4173',
+    'https://sistem-kasir-liard.vercel.app'
+  ]
+
   setResponseHeaders(event, {
     'Access-Control-Allow-Origin': allowed.includes(origin) ? origin : 'http://localhost:5173',
     'Access-Control-Allow-Methods': 'GET, POST, DELETE, PUT, OPTIONS',
