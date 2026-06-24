@@ -212,7 +212,7 @@ export default function PosView({
       </div>
 
       {/* Mobile Cart Panel (overlay) */}
-      {mobileCartOpen && (
+      {false && (
         <div className="mobile-cart-overlay">
           <CartPanel
             cart={cart}
@@ -268,17 +268,9 @@ function ProductCard({ item, onClick }) {
 
   return (
     <div
-      onClick={onClick}
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
-      style={{
-        cursor: 'pointer', borderRadius: 18, overflow: 'hidden',
-        background: 'var(--bg-card)',
-        border: `1px solid ${hovered ? 'var(--primary)' : 'var(--border)'}`,
-        transition: 'all 0.25s',
-        transform: hovered ? 'translateY(-3px)' : 'none',
-        boxShadow: hovered ? '0 12px 30px rgba(107,142,35,0.18)' : 'none',
-        display: 'flex', flexDirection: 'column'
+      onClick={() => {
+        alert(item.name)
+        onClick()
       }}
     >
       <div style={{ height: 140, overflow: 'hidden', position: 'relative' }}>
