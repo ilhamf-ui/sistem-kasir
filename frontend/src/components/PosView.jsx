@@ -225,7 +225,22 @@ export default function PosView({
           />
         </div>
       )}
-
+      {mobileCartOpen && (
+        <div className="mobile-cart-overlay">
+          <CartPanel
+            cart={cart}
+            toppings={toppings}
+            onUpdateQty={updateQty}
+            onRemove={removeItem}
+            onCheckout={() => {
+              setMobileCartOpen(false)
+              setPaymentOpen(true)
+            }}
+            isMobileOpen={mobileCartOpen}
+            onClose={() => setMobileCartOpen(false)}
+          />
+        </div>
+      )}
       {/* Modals */}
       {selectedProduct && (
         <ProductCustomizeModal
