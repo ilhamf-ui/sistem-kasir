@@ -77,12 +77,12 @@ export default function PosView({
   }
 
   return (
-    <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'hidden', position: 'relative' }}>
+    <div style={{ display: 'flex', flex: 1, height: '100%', overflow: 'visible', position: 'relative' }}>
 
       {/* Product Grid */}
       <div style={{
         flex: 1, display: 'flex', flexDirection: 'column',
-        height: '100%', overflow: 'hidden', background: '#121212'
+        height: '100%', overflow: 'visible', background: '#121212'
       }}>
         {/* Topbar */}
         <div style={{
@@ -284,7 +284,6 @@ function ProductCard({ item, onClick }) {
   return (
     <div
       onClick={() => {
-        alert(item.name)
         onClick()
       }}
     >
