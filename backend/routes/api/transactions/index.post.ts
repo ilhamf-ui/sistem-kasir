@@ -15,6 +15,7 @@ export default defineEventHandler(async (event) => {
     total: body.total || 0,
     received: body.received || 0,
     change: body.change || 0,
+    paymentMethod: body.paymentMethod || 'Tunai',
     time: new Date().toISOString()
   }
 

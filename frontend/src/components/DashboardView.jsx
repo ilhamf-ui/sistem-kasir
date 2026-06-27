@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react'
-import { FileSpreadsheet, Calendar, CalendarDays, CalendarCheck, Trash2, Package, Bot } from 'lucide-react'
+import { FileSpreadsheet, Calendar, CalendarDays, CalendarCheck, Trash2, Package, Bot, Filter } from 'lucide-react'
 import { formatIDR, calculateItemPrice } from '../utils/formatters'
 import AiChat from './AiChat'
 
@@ -11,6 +11,7 @@ const FILTERS = [
 
 export default function DashboardView({ transactions, filter, setFilter, role, onDeleteTransaction, onRefresh }) {
   const [aiOpen, setAiOpen] = useState(false)
+  const [shiftFilter, setShiftFilter] = useState('Semua')
 
   const productSummary = useMemo(() => {
     const summary = {}
@@ -27,16 +28,55 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
 
   const totalRevenue = transactions.reduce((sum, t) => sum + t.total, 0)
 
+  // Daftar shift unik yang ada di transaksi
+  const availableShifts = useMemo(() => {
+    const shifts = [...new Set(transactions.map(t => t.shift))].sort((a, b) => a - b)
+    return shifts
+  }, [transactions])
+
+  // Transaksi yang sudah difilter per shift
+  const filteredByShift = useMemo(() => {
+    if (shiftFilter === 'Semua') return transactions
+    return transactions.filter(t => String(t.shift) === String(shiftFilter))
+  }, [transactions, shiftFilter])
+
+  // Pendapatan harian dari semua transaksi (untuk CSV)
+  const dailyRevenue = useMemo(() => {
+    const daily = {}
+    transactions.forEach(t => {
+      const d = new Date(t.time)
+      const dateKey = d.toLocaleDateString('id-ID')
+      if (!daily[dateKey]) daily[dateKey] = { date: dateKey, total: 0, count: 0 }
+      daily[dateKey].total += t.total
+      daily[dateKey].count += 1
+    })
+    return Object.values(daily).sort((a, b) => {
+      // parse dd/mm/yyyy
+      const [da, ma, ya] = a.date.split('/').map(Number)
+      const [db, mb, yb] = b.date.split('/').map(Number)
+      return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db)
+    })
+  }, [transactions])
+
   const exportToCSV = () => {
     if (transactions.length === 0) return
 
     let csv = `LAPORAN PENJUALAN MR & TEA JASUKE - PERIODE ${filter.toUpperCase()}\n\n`
-    csv += '--- RIWAYAT TRANSAKSI ---\n'
-    csv += 'ID Transaksi,Tanggal,Waktu,Kasir,Shift,Total,Diterima,Kembalian,Detail Item\n'
+
+    // --- PENDAPATAN HARIAN ---
+    csv += '--- PENDAPATAN HARIAN ---\n'
+    csv += 'Tanggal,Total Transaksi,Total Pendapatan\n'
+    dailyRevenue.forEach(d => {
+      csv += `${d.date},${d.count},${d.total}\n`
+    })
+    csv += `TOTAL,,${totalRevenue}\n`
+
+    csv += '\n--- RIWAYAT TRANSAKSI ---\n'
+    csv += 'ID Transaksi,Tanggal,Waktu,Kasir,Shift,Metode Bayar,Total,Diterima,Kembalian,Detail Item\n'
     transactions.forEach(t => {
       const d = new Date(t.time)
       const itemsStr = t.items.map(i => `${i.qty}x ${i.name}`).join(' | ')
-      csv += `${t.id},${d.toLocaleDateString('id-ID')},${d.toLocaleTimeString('id-ID')},${t.cashier},${t.shift},${t.total},${t.received},${t.change},"${itemsStr}"\n`
+      csv += `${t.id},${d.toLocaleDateString('id-ID')},${d.toLocaleTimeString('id-ID')},${t.cashier},${t.shift},${t.paymentMethod || 'Tunai'},${t.total},${t.received},${t.change},"${itemsStr}"\n`
     })
     csv += '\n--- REKAP PRODUK TERJUAL ---\n'
     csv += 'Nama Item,Kategori,Total Porsi,Total Pendapatan\n'
@@ -158,7 +198,42 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
           {/* Transaction History */}
           <div className="card" style={{ overflow: 'hidden' }}>
             <div style={{ padding: '16px 18px', borderBottom: '1px solid var(--border)', background: 'rgba(0,0,0,0.2)' }}>
-              <h3 style={{ fontSize: 16, fontWeight: 700 }}>Riwayat Transaksi</h3>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 10 }}>
+                <h3 style={{ fontSize: 16, fontWeight: 700 }}>Riwayat Transaksi</h3>
+                {/* Shift Filter */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Filter size={13} color="var(--text-muted)" />
+                  <span style={{ fontSize: 11, color: 'var(--text-muted)', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Shift:</span>
+                  <div style={{ display: 'flex', background: '#0a0a0a', borderRadius: 8, border: '1px solid var(--border)', overflow: 'hidden' }}>
+                    {['Semua', ...availableShifts].map(s => (
+                      <button
+                        key={s}
+                        onClick={() => setShiftFilter(String(s))}
+                        style={{
+                          padding: '5px 12px', border: 'none', cursor: 'pointer',
+                          fontSize: 12, fontWeight: 600, fontFamily: 'Inter, sans-serif',
+                          background: shiftFilter === String(s) ? 'var(--primary)' : 'transparent',
+                          color: shiftFilter === String(s) ? 'white' : 'var(--text-muted)',
+                          transition: 'all 0.2s'
+                        }}
+                      >
+                        {s === 'Semua' ? 'Semua' : `S-${s}`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+              {/* Shift summary when filtered */}
+              {shiftFilter !== 'Semua' && (
+                <div style={{ marginTop: 10, padding: '8px 12px', borderRadius: 8, background: 'rgba(107,142,35,0.1)', border: '1px solid rgba(107,142,35,0.2)', display: 'flex', gap: 20, flexWrap: 'wrap' }}>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Transaksi: <strong style={{ color: 'white' }}>{filteredByShift.length}</strong>
+                  </span>
+                  <span style={{ fontSize: 12, color: 'var(--text-muted)' }}>
+                    Pendapatan Shift: <strong style={{ color: 'var(--primary)' }}>{formatIDR(filteredByShift.reduce((s, t) => s + t.total, 0))}</strong>
+                  </span>
+                </div>
+              )}
             </div>
             <div className="custom-scrollbar" style={{ maxHeight: 520, overflowX: 'auto', overflowY: 'auto' }}>
               <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 560 }}>
@@ -167,14 +242,16 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Waktu</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>ID</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Item</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600 }}>Shift</th>
                     <th style={{ padding: '12px 16px', textAlign: 'left', fontWeight: 600 }}>Kasir</th>
+                    <th style={{ padding: '12px 10px', textAlign: 'center', fontWeight: 600 }}>Metode</th>
                     <th style={{ padding: '12px 16px', textAlign: 'right', fontWeight: 600 }}>Total</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {transactions.length === 0 ? (
-                    <tr><td colSpan={5} style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 13 }}>Belum ada transaksi.</td></tr>
-                  ) : transactions.map(t => (
+                  {filteredByShift.length === 0 ? (
+                    <tr><td colSpan={7} style={{ padding: '40px 16px', textAlign: 'center', color: 'var(--text-muted)', fontStyle: 'italic', fontSize: 13 }}>Belum ada transaksi{shiftFilter !== 'Semua' ? ` di Shift ${shiftFilter}` : ''}.</td></tr>
+                  ) : filteredByShift.map(t => (
                     <tr
                       key={t.id}
                       style={{ borderTop: '1px solid var(--border)', transition: 'background 0.1s' }}
@@ -185,11 +262,29 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
                         {new Date(t.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'white' }}>{t.id}</td>
-                      <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
+                      <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
                         title={t.items.map(i => `${i.qty}x ${i.name}`).join(', ')}>
                         {t.items.map(i => `${i.qty}x ${i.name}`).join(', ')}
                       </td>
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, padding: '3px 8px', borderRadius: 6, background: 'rgba(107,142,35,0.15)', color: 'var(--primary)', border: '1px solid rgba(107,142,35,0.25)' }}>S-{t.shift}</span>
+                      </td>
                       <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)' }}>{t.cashier}</td>
+                      <td style={{ padding: '12px 10px', textAlign: 'center' }}>
+                        {(t.paymentMethod === 'QRIS') ? (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                            background: 'rgba(59,130,246,0.15)', color: '#60a5fa',
+                            border: '1px solid rgba(59,130,246,0.3)', whiteSpace: 'nowrap'
+                          }}>📱 QRIS</span>
+                        ) : (
+                          <span style={{
+                            fontSize: 10, fontWeight: 700, padding: '3px 8px', borderRadius: 6,
+                            background: 'rgba(34,197,94,0.12)', color: '#4ade80',
+                            border: '1px solid rgba(34,197,94,0.25)', whiteSpace: 'nowrap'
+                          }}>💵 Tunai</span>
+                        )}
+                      </td>
                       <td style={{ padding: '12px 16px', textAlign: 'right' }}>
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10 }}>
                           <span style={{ fontWeight: 700, color: 'var(--primary)', fontSize: 13 }}>{formatIDR(t.total)}</span>

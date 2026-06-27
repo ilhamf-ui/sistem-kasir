@@ -4439,7 +4439,11 @@ const _VVOCoE = eventHandler((event) => {
 
 const _YyCE_c = defineEventHandler((event) => {
   const origin = getRequestHeader(event, "origin") || "";
-  const allowed = ["http://localhost:5173", "http://localhost:4173"];
+  const allowed = [
+    "http://localhost:5173",
+    "http://localhost:4173",
+    "https://sistem-kasir-liard.vercel.app"
+  ];
   setResponseHeaders(event, {
     "Access-Control-Allow-Origin": allowed.includes(origin) ? origin : "http://localhost:5173",
     "Access-Control-Allow-Methods": "GET, POST, DELETE, PUT, OPTIONS",

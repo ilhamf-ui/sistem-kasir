@@ -57,8 +57,8 @@ export default function PosView({
     })
   }
 
-  const handlePaymentConfirm = async (received, change) => {
-    if (change < 0) {
+  const handlePaymentConfirm = async (received, change, paymentMethod = 'Tunai') => {
+    if (paymentMethod === 'Tunai' && change < 0) {
       showMessage('Pembayaran Gagal', 'Uang yang diterima kurang dari total tagihan!')
       return
     }
@@ -67,13 +67,18 @@ export default function PosView({
       total: cartTotal,
       received,
       change,
+      paymentMethod,
       cashier: cashierName,
       shift: shiftNumber,
     })
     setCart([])
     setPaymentOpen(false)
     setMobileCartOpen(false)
-    showMessage('Transaksi Berhasil! ✅', `Total: ${formatIDR(cartTotal)}\nKembalian: ${formatIDR(change)}`)
+    const methodLabel = paymentMethod === 'QRIS' ? '📱 QRIS' : '💵 Tunai'
+    const detail = paymentMethod === 'QRIS'
+      ? `Total: ${formatIDR(cartTotal)}\nMetode: ${methodLabel}`
+      : `Total: ${formatIDR(cartTotal)}\nMetode: ${methodLabel}\nKembalian: ${formatIDR(change)}`
+    showMessage('Transaksi Berhasil! ✅', detail)
   }
 
   return (
@@ -91,7 +96,7 @@ export default function PosView({
           padding: '0 28px', background: 'rgba(26,26,26,0.85)',
           backdropFilter: 'blur(12px)', flexShrink: 0
         }}>
-          <h1 style={{ fontSize: 22, fontWeight: 800, color: 'var(--secondary)' }}>Kasir POS</h1>
+          <h1 style={{ fontSize: 20, fontWeight: 800, color: 'var(--secondary)' }}>Kasir Mr.Tea & Jasuke</h1>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-secondary)', fontSize: 13 }}>
             <span style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--success)', display: 'inline-block' }} />
             <span>S-{shiftNumber} •</span>
