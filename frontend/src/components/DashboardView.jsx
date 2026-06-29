@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react'
 import { FileSpreadsheet, Calendar, CalendarDays, CalendarCheck, Trash2, Package, Bot, Filter } from 'lucide-react'
 import { formatIDR, calculateItemPrice } from '../utils/formatters'
 import AiChat from './AiChat'
+import * as XLSX from 'xlsx'
 
 const FILTERS = [
   { key: 'Harian', icon: Calendar },
@@ -58,40 +59,99 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
     })
   }, [transactions])
 
-  const exportToCSV = () => {
+  const exportToXLSX = () => {
     if (transactions.length === 0) return
 
-    let csv = `LAPORAN PENJUALAN MR & TEA JASUKE - PERIODE ${filter.toUpperCase()}\n\n`
+    const wb = XLSX.utils.book_new()
 
-    // --- PENDAPATAN HARIAN ---
-    csv += '--- PENDAPATAN HARIAN ---\n'
-    csv += 'Tanggal,Total Transaksi,Total Pendapatan\n'
-    dailyRevenue.forEach(d => {
-      csv += `${d.date},${d.count},${d.total}\n`
+    // ── Tentukan periode label ──────────────────────────────────────────────
+    const sortedTrx = [...transactions].sort((a, b) => new Date(a.time) - new Date(b.time))
+    const firstDate = new Date(sortedTrx[0].time).toLocaleDateString('id-ID')
+    const lastDate  = new Date(sortedTrx[sortedTrx.length - 1].time).toLocaleDateString('id-ID')
+    const periodeLabel = firstDate === lastDate ? firstDate : `${firstDate} – ${lastDate}`
+
+    // ── Sheet 1 : Ringkasan ────────────────────────────────────────────────
+    const ws1Data = [
+      ['LAPORAN PENJUALAN MR & TEA JASUKE'],
+      [],
+      ['Total Penjualan', totalRevenue],
+      ['Total Transaksi', transactions.length],
+      ['Periode', periodeLabel],
+    ]
+    const ws1 = XLSX.utils.aoa_to_sheet(ws1Data)
+    ws1['!cols'] = [{ wch: 20 }, { wch: 25 }]
+    XLSX.utils.book_append_sheet(wb, ws1, 'Ringkasan')
+
+    // ── Sheet 2 : Riwayat Transaksi ────────────────────────────────────────
+    const ws2Header = ['ID', 'Tanggal', 'Waktu', 'Kasir', 'Shift', 'Metode Bayar', 'Total', 'Uang Diterima', 'Kembalian', 'Detail Item']
+    const ws2Rows = transactions.map(t => {
+      const d = new Date(t.time)
+      const tanggal = d.toLocaleDateString('id-ID')
+      const jam = new Intl.DateTimeFormat('id-ID', { hour: '2-digit', minute: '2-digit', hour12: false })
+        .format(d).replace('.', ':') + ' WIB'
+      const detail = t.items.map(i => `${i.qty}x ${i.size ? `${i.name} (${i.size})` : i.name}`).join(' | ')
+      const diterima = t.paymentMethod === 'QRIS' ? t.total : (t.received ?? t.total)
+      const kembalian = t.paymentMethod === 'QRIS' ? 0 : (t.change ?? 0)
+      return [t.id, tanggal, jam, t.cashier, `S-${t.shift}`, t.paymentMethod || 'Tunai', t.total, diterima, kembalian, detail]
     })
-    csv += `TOTAL,,${totalRevenue}\n`
+    const ws2 = XLSX.utils.aoa_to_sheet([ws2Header, ...ws2Rows])
+    ws2['!cols'] = [{ wch: 16 }, { wch: 12 }, { wch: 12 }, { wch: 14 }, { wch: 8 }, { wch: 14 }, { wch: 14 }, { wch: 16 }, { wch: 14 }, { wch: 50 }]
+    XLSX.utils.book_append_sheet(wb, ws2, 'Riwayat Transaksi')
 
-    csv += '\n--- RIWAYAT TRANSAKSI ---\n'
-    csv += 'ID Transaksi,Tanggal,Waktu,Kasir,Shift,Metode Bayar,Total,Diterima,Kembalian,Detail Item\n'
+    // ── Sheet 3 : Rekap Produk ─────────────────────────────────────────────
+    const ws3Header = ['Nama Produk', 'Jumlah Terjual', 'Pendapatan']
+    const ws3Rows = productSummary.map(item => [item.name, item.qty, item.revenue])
+    const ws3 = XLSX.utils.aoa_to_sheet([ws3Header, ...ws3Rows])
+    ws3['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 16 }]
+    XLSX.utils.book_append_sheet(wb, ws3, 'Rekap Produk')
+
+    // ── Sheet 4 : Pendapatan Pembayaran ────────────────────────────────────
+    const tunaiTrx = transactions.filter(t => (t.paymentMethod || 'Tunai') === 'Tunai')
+    const qrisTrx  = transactions.filter(t => t.paymentMethod === 'QRIS')
+    const totalTunai = tunaiTrx.reduce((s, t) => s + t.total, 0)
+    const totalQris  = qrisTrx.reduce((s, t) => s + t.total, 0)
+
+    const ws4Data = [
+      ['Metode Bayar', 'Jumlah Transaksi', 'Total Pendapatan'],
+      ['Tunai', tunaiTrx.length, totalTunai],
+      ['QRIS',  qrisTrx.length,  totalQris],
+      [],
+      ['Total Tunai', '', totalTunai],
+      ['Total QRIS',  '', totalQris],
+      ['Grand Total', '', totalTunai + totalQris],
+    ]
+    const ws4 = XLSX.utils.aoa_to_sheet(ws4Data)
+    ws4['!cols'] = [{ wch: 16 }, { wch: 20 }, { wch: 20 }]
+    XLSX.utils.book_append_sheet(wb, ws4, 'Pendapatan Pembayaran')
+
+    // ── Sheet 5 : Produk Terjual Harian ───────────────────────────────────
+    const dailyProductMap = {}
     transactions.forEach(t => {
       const d = new Date(t.time)
-      const itemsStr = t.items.map(i => `${i.qty}x ${i.name}`).join(' | ')
-      csv += `${t.id},${d.toLocaleDateString('id-ID')},${d.toLocaleTimeString('id-ID')},${t.cashier},${t.shift},${t.paymentMethod || 'Tunai'},${t.total},${t.received},${t.change},"${itemsStr}"\n`
+      const dateKey = d.toLocaleDateString('id-ID')
+      t.items.forEach(item => {
+        const prodName = item.size ? `${item.name} (${item.size})` : item.name
+        const key = `${dateKey}||${prodName}`
+        if (!dailyProductMap[key]) dailyProductMap[key] = { tanggal: dateKey, produk: prodName, qty: 0, pendapatan: 0 }
+        dailyProductMap[key].qty += item.qty
+        dailyProductMap[key].pendapatan += calculateItemPrice(item, {}) * item.qty
+      })
     })
-    csv += '\n--- REKAP PRODUK TERJUAL ---\n'
-    csv += 'Nama Item,Kategori,Total Porsi,Total Pendapatan\n'
-    productSummary.forEach(item => {
-      csv += `"${item.name}",${item.category},${item.qty},${item.revenue}\n`
-    })
+    const ws5Header = ['Tanggal', 'Produk', 'Qty', 'Pendapatan']
+    const ws5Rows = Object.values(dailyProductMap)
+      .sort((a, b) => {
+        const [da, ma, ya] = a.tanggal.split('/').map(Number)
+        const [db, mb, yb] = b.tanggal.split('/').map(Number)
+        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db) || a.produk.localeCompare(b.produk)
+      })
+      .map(r => [r.tanggal, r.produk, r.qty, r.pendapatan])
+    const ws5 = XLSX.utils.aoa_to_sheet([ws5Header, ...ws5Rows])
+    ws5['!cols'] = [{ wch: 14 }, { wch: 30 }, { wch: 8 }, { wch: 16 }]
+    XLSX.utils.book_append_sheet(wb, ws5, 'Produk Terjual Harian')
 
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.setAttribute('href', url)
-    link.setAttribute('download', `Laporan_${filter}_Jasuke.csv`)
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
+    // ── Download ───────────────────────────────────────────────────────────
+    const today = new Date().toLocaleDateString('id-ID').replace(/\//g, '-')
+    XLSX.writeFile(wb, `Laporan_${filter}_Jasuke_${today}.xlsx`)
   }
 
   return (
@@ -129,12 +189,12 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
             </div>
           </div>
           <button
-            onClick={exportToCSV}
+            onClick={exportToXLSX}
             disabled={transactions.length === 0}
             className="btn-primary"
             style={{ padding: '12px 20px', fontSize: 14, gap: 8 }}
           >
-            <FileSpreadsheet size={18} /> Export CSV
+            <FileSpreadsheet size={18} /> Export Excel
           </button>
         </div>
 
@@ -259,7 +319,24 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
                       onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
                     >
                       <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-secondary)' }}>
-                        {new Date(t.time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        <div style={{ fontWeight: 600 }}>
+                          {new Date(t.time).toLocaleDateString('id-ID', {
+                            day: '2-digit',
+                            month: '2-digit',
+                            year: 'numeric',
+                          })}
+                        </div>
+
+                        <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
+                          {new Intl.DateTimeFormat('id-ID', {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            hour12: false,
+                          })
+                            .format(new Date(t.time))
+                            .replace('.', ':')}{' '}
+                          WIB
+                        </div>
                       </td>
                       <td style={{ padding: '12px 16px', fontSize: 12, fontWeight: 600, color: 'white' }}>{t.id}</td>
                       <td style={{ padding: '12px 16px', fontSize: 12, color: 'var(--text-muted)', maxWidth: 160, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}
