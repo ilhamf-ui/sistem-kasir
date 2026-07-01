@@ -67,7 +67,7 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
     // ── Tentukan periode label ──────────────────────────────────────────────
     const sortedTrx = [...transactions].sort((a, b) => new Date(a.time) - new Date(b.time))
     const firstDate = new Date(sortedTrx[0].time).toLocaleDateString('id-ID')
-    const lastDate  = new Date(sortedTrx[sortedTrx.length - 1].time).toLocaleDateString('id-ID')
+    const lastDate = new Date(sortedTrx[sortedTrx.length - 1].time).toLocaleDateString('id-ID')
     const periodeLabel = firstDate === lastDate ? firstDate : `${firstDate} – ${lastDate}`
 
     // ── Sheet 1 : Ringkasan ────────────────────────────────────────────────
@@ -107,19 +107,61 @@ export default function DashboardView({ transactions, filter, setFilter, role, o
 
     // ── Sheet 4 : Pendapatan Pembayaran ────────────────────────────────────
     const tunaiTrx = transactions.filter(t => (t.paymentMethod || 'Tunai') === 'Tunai')
-    const qrisTrx  = transactions.filter(t => t.paymentMethod === 'QRIS')
+    const qrisTrx = transactions.filter(t => t.paymentMethod === 'QRIS')
     const totalTunai = tunaiTrx.reduce((s, t) => s + t.total, 0)
-    const totalQris  = qrisTrx.reduce((s, t) => s + t.total, 0)
+    const totalQris = qrisTrx.reduce((s, t) => s + t.total, 0)
+
+    // Rekap pendapatan per hari berdasarkan metode pembayaran
+    const dailyPayment = {}
+
+    transactions.forEach(t => {
+      const tanggal = new Date(t.time).toLocaleDateString('id-ID')
+
+      if (!dailyPayment[tanggal]) {
+        dailyPayment[tanggal] = {
+          tunai: 0,
+          qris: 0,
+          total: 0
+        }
+      }
+
+      if ((t.paymentMethod || 'Tunai') === 'QRIS') {
+        dailyPayment[tanggal].qris += t.total
+      } else {
+        dailyPayment[tanggal].tunai += t.total
+      }
+
+      dailyPayment[tanggal].total += t.total
+    })
 
     const ws4Data = [
       ['Metode Bayar', 'Jumlah Transaksi', 'Total Pendapatan'],
       ['Tunai', tunaiTrx.length, totalTunai],
-      ['QRIS',  qrisTrx.length,  totalQris],
+      ['QRIS', qrisTrx.length, totalQris],
       [],
       ['Total Tunai', '', totalTunai],
-      ['Total QRIS',  '', totalQris],
+      ['Total QRIS', '', totalQris],
       ['Grand Total', '', totalTunai + totalQris],
+      [],
+      ['Pendapatan Per Hari'],
+      ['Tanggal', 'Tunai', 'QRIS', 'Total']
     ]
+
+    Object.entries(dailyPayment)
+      .sort((a, b) => {
+        const [da, ma, ya] = a[0].split('/').map(Number)
+        const [db, mb, yb] = b[0].split('/').map(Number)
+        return new Date(ya, ma - 1, da) - new Date(yb, mb - 1, db)
+      })
+      .forEach(([tanggal, data]) => {
+        ws4Data.push([
+          tanggal,
+          data.tunai,
+          data.qris,
+          data.total
+        ])
+      })
+
     const ws4 = XLSX.utils.aoa_to_sheet(ws4Data)
     ws4['!cols'] = [{ wch: 16 }, { wch: 20 }, { wch: 20 }]
     XLSX.utils.book_append_sheet(wb, ws4, 'Pendapatan Pembayaran')
